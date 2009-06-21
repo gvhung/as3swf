@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<mx:WindowedApplication title="kode80's AS3SWF explorer" xmlns:mx="http://www.adobe.com/2006/mxml" xmlns:views="views.*" creationComplete="_creationCompleteHandler();" showFlexChrome="true" showTitleBar="true" showStatusBar="false">
+	<mx:Style>
+		WindowedApplication { padding-bottom:10; padding-left:8; padding-right:8; padding-top:8; }
+		TextArea { fontSize:"10"; }
+		DataGridColumn { textAlign:"center"; }
+	</mx:Style> 
+	
+	<mx:HDividedBox width="100%" height="100%" liveDragging="true">
+		<mx:Panel title="File structure" width="100%" height="100%">
+			<mx:VBox width="100%" height="100%">
+				<mx:Text id="output" width="100%" height="165"/>
+				<!--<mx:List id="tags" labelField="label" width="100%" height="100%" itemClick="ItemClickHandler()" />-->
+				<mx:DataGrid id="tags" labelField="label" width="100%" height="100%" change="changeHandler()">
+					<mx:columns>
+						<mx:DataGridColumn width="60" dataField="index" headerText="Index"/>
+						<mx:DataGridColumn width="53" dataField="code" headerText="Code" />
+						<mx:DataGridColumn dataField="name" headerText="Name" />
+						<mx:DataGridColumn width="85" dataField="isSupported" headerText="Supported" />
+					</mx:columns>
+				</mx:DataGrid>
+			</mx:VBox>
+		</mx:Panel>
+		<mx:Panel title="Tag viewer" width="100%" height="100%">
+			<mx:ViewStack id="viewStack" width="100%" height="100%">
+				<mx:VBox id="defaultView" width="100%" height="100%">
+					<mx:TextArea id="defaultText" width="100%" height="100%" wordWrap="false" />
+				</mx:VBox>
+				<mx:Canvas id="imageView" width="100%" height="100%">
+				</mx:Canvas>
+				<views:DoAbcView id="abcView" width="100%" height="100%" />
+			</mx:ViewStack>
+		</mx:Panel>
+	</mx:HDividedBox>
+	
+	<mx:Script>
+		<![CDATA[
+		import com.kode80.swf.structures.SWFHeader;
+		import com.kode80.swf.structures.SWFInfo;
+		import com.kode80.swf.SWF;
+		import com.kode80.swf.tags.DefineBitsLossless;
+		import com.kode80.swf.tags.DefineBitsLossless2;
+		import com.kode80.swf.tags.DoABCTag;
+		import com.kode80.swf.tags.FileAttributesTag;
+		import com.kode80.swf.tags.Tag;
+		import com.kode80.swf.tags.TagCodes;
+		import com.kode80.swf.utils.BitReader;
+		import flash.display.Bitmap;
+		import flash.display.BitmapData;
+		import flash.display.Graphics;
+		import flash.events.NativeDragEvent;
+		import flash.filesystem.File;
+		import flash.filesystem.FileMode;
+		import flash.filesystem.FileStream;
+		import flash.geom.Rectangle;
+		import flash.text.TextFormat;
+		import flash.utils.ByteArray;
+		import flash.net.URLLoader;
+		import flash.utils.describeType;
+		import flash.utils.Endian;
+		import mx.managers.DragManager;
+		
+		private var _bytes:ByteArray;
+		
+		private function _creationCompleteHandler():void
+		{
+			addEventListener( NativeDragEvent.NATIVE_DRAG_ENTER, _dragEnterHandler);
+			addEventListener( NativeDragEvent.NATIVE_DRAG_DROP, _dragDropHandler);
+				
+			output.setStyle( "textFormat", new TextFormat( null, 15));
+			//var file:File = new File( File.applicationDirectory.nativePath + "/IntTest.swf");
+			//_ParseSwf( file);
+		}
+		
+		private function _parseSwf( file:File):void
+		{
+			var fs:FileStream = new FileStream();
+			
+			fs.open( file, FileMode.READ);
+			_bytes = new ByteArray();
+			_bytes.endian = Endian.LITTLE_ENDIAN;
+			fs.readBytes( _bytes);
+			fs.close();
+			
+			var sizeOnDisk:uint = _bytes.length;
+			var swf:SWF = new SWF();
+			swf.readFrom( _bytes);
+			
+			var s:String = file.name + "\n\n";
+			s += "Header:\n\t";
+			s += "is compressed: " + swf.isCompressed + "\n\t";
+			s += "version: " + swf.version + "\n\t";
+			s += "uncompressed size: " + swf.uncompressedFileSize + "\n\t";
+			s += "size on disk: " + sizeOnDisk + "\n\t";
+			s += "frame rectangle: " + swf.frameRectangle + "\n\t";
+			s += "frame rate: " + swf.frameRate + "\n\t";
+			s += "number of frames: " + swf.numberOfFrames + "\n\n\t";
+			
+			var dp:Array = new Array();
+			var object:Object;
+			var tag:Tag;
+			for ( var i:uint = 0; i < swf.numberOfTags; i++)
+			{
+				tag = swf.getTagAt(i);
+				object = new Object();
+				object.index = i;
+				object.code = tag.tagCode;
+				object.name = TagCodes.tagCodeToString( tag.tagCode);
+				object.isSupported = swf.isSupportedTag( tag.tagCode);
+				object.tag = tag;
+				dp.push( object);
+			}
+			
+			tags.dataProvider = dp;
+			output.text = s;
+		}
+		
+		private function _dragDropHandler(e:NativeDragEvent):void 
+		{
+			if ( e.clipboard.hasFormat( ClipboardFormats.FILE_LIST_FORMAT))
+			{
+				var files:Array = e.clipboard.getData( ClipboardFormats.FILE_LIST_FORMAT) as Array;
+				var file:File = files[0];
+				_parseSwf( file);
+			}
+		}
+	
+		private function _dragEnterHandler(e:NativeDragEvent):void 
+		{
+			if ( e.clipboard.hasFormat( ClipboardFormats.FILE_LIST_FORMAT))
+			{
+				var files:Array = e.clipboard.getData( ClipboardFormats.FILE_LIST_FORMAT) as Array;
+				
+				if ( files.length == 1)
+				{
+					var file:File = files[0];
+					
+					if ( file.extension.toLowerCase() == "swf")
+					{
+						DragManager.acceptDragDrop( this);
+					}
+				}
+			}
+		}
+		
+		public function changeHandler():void
+		{
+			var tag:Tag = tags.selectedItem.tag;
+			var g:Graphics;
+			var bitmapData:BitmapData;
+					
+			switch( tag.tagCode)
+			{
+				case TagCodes.DEFINE_BITS_LOSSLESS:
+				case TagCodes.DEFINE_BITS_LOSSLESS2:
+					if ( tag.tagCode == TagCodes.DEFINE_BITS_LOSSLESS)
+					{
+						bitmapData = (tag as DefineBitsLossless).bitmapData;
+					}
+					else
+					{
+						bitmapData = (tag as DefineBitsLossless2).bitmapData;
+					}
+					g = imageView.graphics;
+					g.clear();
+					g.beginBitmapFill( bitmapData);
+					g.drawRect( 0, 0, bitmapData.width, bitmapData.height);
+					g.endFill();
+					viewStack.selectedChild = imageView;
+				break;
+				
+				case TagCodes.DO_ABC:
+					abcView.tag = tag as DoABCTag;
+					viewStack.selectedChild = abcView;
+				break;
+				
+				default:
+					defaultText.text = tag.toString();
+					viewStack.selectedChild = defaultView;
+				break;
+			}
+		}
+		]]>
+	</mx:Script>
+</mx:WindowedApplication>

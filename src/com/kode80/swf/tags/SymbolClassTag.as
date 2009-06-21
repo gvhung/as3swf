@@ -56,7 +56,7 @@
 			return _symbolIDs[ index];
 		}
 		
-		public function GetClassName( id:uint):String
+		public function getClassName( id:uint):String
 		{
 			return _symbolIDHash[ id];
 		}

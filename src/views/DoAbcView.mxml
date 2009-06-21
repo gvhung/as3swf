@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:VBox xmlns:mx="http://www.adobe.com/2006/mxml" creationComplete="_CreationCompleteHandler();">
+	<mx:Tree id="tree" labelField="@label" width="100%" height="100%" showRoot="false" />
+	
+	<mx:Script>
+		<![CDATA[
+			import com.kode80.swf.abc.CPoolInfo;
+			import com.kode80.swf.abc.MultinameKinds;
+			import com.kode80.swf.abc.multinames.AbstractMultiname;
+			import com.kode80.swf.abc.multinames.QName;
+			import com.kode80.swf.abc.multinames.Multiname;
+			import com.kode80.swf.abc.multinames.MultinameL;
+			import com.kode80.swf.abc.multinames.RTQName;
+			import com.kode80.swf.abc.multinames.RTQNameL;
+			import com.kode80.swf.abc.NamespaceInfo;
+			import com.kode80.swf.abc.NamespaceSet;
+			import com.kode80.swf.tags.DoABCTag;
+			import com.kode80.swf.tags.Tag;
+			
+			protected var _tag:DoABCTag;
+			
+			//=========================================================
+			//	Properties
+			//=========================================================
+			
+			public function get tag():DoABCTag { return _tag; }
+			public function set tag( value:DoABCTag):void 
+			{ 
+				_tag = value;
+				_Update();
+			}
+			
+			//=========================================================
+			//	Event Handlers
+			//=========================================================
+			
+			private function _CreationCompleteHandler():void
+			{
+				_Update();
+			}
+			
+			//=========================================================
+			//	Private Methods
+			//=========================================================
+			
+			protected function _Update():void
+			{
+				if ( tree)
+				{
+					var xml:XML = <branch label="ABC File"></branch>;
+					var cpool:CPoolInfo = _tag.abcFile.cPoolInfo;
+					
+					xml.appendChild( new XML( "<leaf label=\"Version: " + _tag.abcFile.majorVersion + "." + _tag.abcFile.minorVersion + "\"/>"));
+					
+					var cpoolXml:XML = <branch label="Constants"></branch>;
+					var intsXml:XML = <branch label="int"></branch>;
+					for ( var i:uint = 0; i < cpool.numberOfInts; i++)
+					{
+						intsXml.appendChild( new XML( "<leaf label=\"" + cpool.getIntAt(i) + "\"/>" ));
+					}
+					cpoolXml.appendChild( intsXml);
+					
+					var uintsXml:XML = <branch label="uint"></branch>;
+					for ( i = 0; i < cpool.numberOfUints; i++)
+					{
+						uintsXml.appendChild( new XML( "<leaf label=\"" + cpool.getUintAt(i) + "\"/>" ));
+					}
+					cpoolXml.appendChild( uintsXml);
+					
+					var doublesXml:XML = <branch label="double"></branch>;
+					for ( i = 0; i < cpool.numberOfDoubles; i++)
+					{
+						doublesXml.appendChild( new XML( "<leaf label=\"" + cpool.getDoubleAt(i) + "\"/>" ));
+					}
+					cpoolXml.appendChild( doublesXml);
+					
+					var stringsXml:XML = <branch label="string"></branch>;
+					for ( i = 0; i < cpool.numberOfInts; i++)
+					{
+						stringsXml.appendChild( new XML( "<leaf label=\"" + cpool.getStringAt(i) + "\"/>" ));
+					}
+					cpoolXml.appendChild( stringsXml);
+					
+					var namespaceXml:XML = <branch label="namespace"></branch>;
+					for ( i = 0; i < cpool.numberOfNamespaces; i++)
+					{
+						namespaceXml.appendChild( _CreateNamespaceXml( cpool.getNamespaceAt( i)));
+					}
+					cpoolXml.appendChild( namespaceXml);
+					
+					var namespaceSetXml:XML = <branch label="namespace set"></branch>;
+					for ( i = 0; i < cpool.numberOfNamespaceSets; i++)
+					{
+						namespaceSetXml.appendChild( _CreateNamespaceSetXml( cpool.getNamespaceSetAt( i)));
+					}
+					cpoolXml.appendChild( namespaceSetXml);
+					
+					var multinameXml:XML = <branch label="multiname"></branch>;
+					for ( i = 0; i < cpool.numberOfMultinames; i++)
+					{
+						multinameXml.appendChild( _CreateMultinameXml( cpool.getMultinameAt( i)));
+					}
+					cpoolXml.appendChild( multinameXml);
+					
+					xml.appendChild( cpoolXml);
+					
+					tree.dataProvider = xml;
+					tree.validateNow();
+					//tree.expandChildrenOf( multinameXml, true);
+				}
+			}
+			
+			private function _CreateNamespaceXml( nameSpace:NamespaceInfo):XML
+			{
+				var xml:XML = <leaf label=""/>;
+				xml.@label = nameSpace.name + ", " + nameSpace.kind;
+				return xml;
+			}
+			
+			private function _CreateNamespaceSetXml( namespaceSet:NamespaceSet):XML
+			{
+				var xml:XML = <branch label=""></branch>;
+				xml.@label = "namespace set";
+				
+				for ( var i:uint = 0; i < namespaceSet.numberOfNamespaces; i++)
+				{
+					xml.appendChild( _CreateNamespaceXml( namespaceSet.getNamespaceAt( i)));
+				}
+				
+				return xml;
+			}
+			
+			private function _CreateMultinameXml( multiname:AbstractMultiname):XML
+			{
+				var cast:*;
+				var xml:XML = <branch label=""></branch>;
+				xml.@label = MultinameKinds.multinameKindToString( multiname.kind);
+				
+				switch( multiname.kind)
+				{
+					case MultinameKinds.QNAME:
+					case MultinameKinds.QNAMEA:
+						cast = multiname as com.kode80.swf.abc.multinames.QName;
+						xml.appendChild( new XML( "<leaf label=\"" + cast.name + "\" />"));
+						xml.appendChild( _CreateNamespaceXml( cast.nameSpace));
+					break;
+					
+					case MultinameKinds.RTQNAME:
+					case MultinameKinds.RTQNAMEA:
+						cast = multiname as RTQName;
+						xml.appendChild( new XML( "<leaf label=\"" + cast.name + "\" />"));
+					break;
+					
+					case MultinameKinds.RTQNAMEL:
+					case MultinameKinds.RTQNAMELA:
+					break;
+					
+					case MultinameKinds.MULTINAME:
+					case MultinameKinds.MULTINAMEA:
+						cast = multiname as Multiname;
+						xml.appendChild( new XML( "<leaf label=\"" + cast.name + "\" />"));
+						xml.appendChild( _CreateNamespaceSetXml( cast.namespaceSet));
+					break;
+					
+					case MultinameKinds.MULTINAMEL:
+					case MultinameKinds.MULTINAMELA:
+						cast = multiname as MultinameL;
+						xml.appendChild( _CreateNamespaceSetXml( cast.namespaceSet));
+					break;
+				}
+				
+				return xml;
+			}
+			
+		]]>
+	</mx:Script>
+</mx:VBox>
